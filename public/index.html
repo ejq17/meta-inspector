@@ -220,7 +220,7 @@ const lenPill = (n, lo, hi) => `<span class="len ${n<lo||n>hi?'bad':''}">${n} ch
 const link = (u) => u ? `<a href="${esc(u)}" target="_blank" rel="noopener" class="trunc" title="${esc(u)}">${esc(u)}</a>` : nul(null);
 const boolPill = (b, t, f) => b ? `<span class="pill ok">${t}</span>` : `<span class="pill err">${f}</span>`;
 const val = (v) => Array.isArray(v) ? v.map(x => `<div>${esc(x)}</div>`).join('') : nul(v);
-const img = (u) => '/api/img?url=' + encodeURIComponent(u);
+const img = (u) => !u ? '' : /^(data|blob):/i.test(u) ? u : '/api/img?url=' + encodeURIComponent(u);
 
 
 const gcls = (g) => 'g' + g;
@@ -256,7 +256,21 @@ function report(d){
     </div>
     ${A.categories.map(c => `<div class="card" id="cat-${c.id}"><h3>${esc(c.name)} <span class="n ${gcls(c.grade)}" style="font-weight:700">${c.score} · ${c.grade}</span></h3>
       <ul class="warnlist">${c.findings.map(f => `<li><span class="sev ${f.severity}">${f.severity}</span><div>${esc(f.msg)}${f.fix&&f.severity!=='pass'?`<div class="fx muted" style="font-size:12px">${esc(f.fix)}</div>`:''}</div></li>`).join('') || '<li class="muted">no checks triggered</li>'}</ul></div>`).join('')}
+    ${sitePagesCard(d)}
   </div>`;
+}
+
+// Ratings for every crawled page on this site (from the Site tab's crawl), worst first.
+const CAT_SHORT = { seo: 'SEO', social: 'Social', structured: 'Schema', a11y: 'A11y', tech: 'Tech', ai: 'AI' };
+function sitePagesCard(d){
+  const S = siteState, origin = new URL(d.http.finalUrl).origin;
+  if (!S.pages.length) return `<div class="card wide"><h3>Site pages</h3><span class="muted">Run a crawl from the <a href="#" onclick="activeTab='site';localStorage.setItem('mi.tab','site');render(false);return false">Site tab</a> to rate every page here.</span></div>`;
+  const rows = [...S.pages].sort((a,b) => a.score - b.score);
+  return `<div class="card wide" style="overflow:auto"><h3>Site pages <span class="n">${S.pages.length}${S.summary ? ` · avg ${S.summary.avgScore}` : ' · crawling…'}</span></h3>
+    <table class="site"><thead><tr><th>score</th><th>url</th>${Object.values(CAT_SHORT).map(n => `<th>${n}</th>`).join('')}<th>high</th><th>med</th><th>low</th><th>top issue</th></tr></thead>
+    <tbody>${rows.map(p => { const cats = Object.fromEntries((p.categories||[]).map(c => [c.id, c]));
+      return `<tr onclick="urlIn.value='${esc(p.url)}';inspect()"><td class="sc ${gcls(p.grade)}">${p.score} ${p.grade}</td><td title="${esc(p.url)}">${esc(p.url.replace(origin,'')||'/')}${p.status===200?'':` <span class="gF">${p.status||'ERR'}</span>`}</td>${Object.keys(CAT_SHORT).map(id => cats[id] ? `<td class="${gcls(cats[id].grade)}">${cats[id].score}</td>` : '<td class="muted">—</td>').join('')}<td class="${p.high?'gF':''}">${p.high}</td><td class="${p.med?'gC':''}">${p.med}</td><td>${p.low}</td><td class="muted" title="${esc((p.topFixes||[]).join(' · '))}">${esc(p.topFixes?.[0]||'')}</td></tr>`; }).join('')}</tbody></table>
+    <div class="hint" style="margin-top:8px">Included in Copy Markdown / Copy for AI / Download .md / Printable once the crawl finishes. Click a row to inspect that page.</div></div>`;
 }
 
 function ai(d){
@@ -319,7 +333,7 @@ async function crawlSite(){
       for (const line of lines) { if (!line.trim()) continue; const m = JSON.parse(line);
         if (m.type === 'page') { S.pages.push(m.page); S.queued = m.queued; }
         if (m.type === 'done') { S.summary = m.summary; S.pages = m.pages; }
-        if (activeTab === 'site') render(false);
+        if (activeTab === 'site' || activeTab === 'report') render(false);
       }
     }
   } catch (e) { $('#errbox').innerHTML = `<div class="err-banner">Crawl failed: ${esc(e.message)}</div>`; }
@@ -330,15 +344,18 @@ function siteMarkdown(){
   const L = [`# Site audit — ${origin}`, '', `Pages: ${sum.pages} · errors: ${sum.errors} · average score: ${sum.avgScore}/100`, '', `Missing title: ${sum.missingTitle} · missing description: ${sum.missingDescription} · missing og:image: ${sum.missingOgImage} · no h1: ${sum.noH1} · noindex: ${sum.noindex}`, ''];
   if (sum.duplicateTitles.length) { L.push('## Duplicate titles', ''); sum.duplicateTitles.forEach(t => L.push(`- "${t.title}"`, ...t.urls.map(u => `  - ${u}`))); L.push(''); }
   if (sum.duplicateDescriptions.length) { L.push('## Duplicate descriptions', ''); sum.duplicateDescriptions.forEach(t => L.push(`- "${t.description}"`, ...t.urls.map(u => `  - ${u}`))); L.push(''); }
-  L.push('## Pages', '', '| Score | URL | Status | Title len | Desc len | H1 | High | Med | Low | Top issues |', '|---|---|---|---|---|---|---|---|---|---|');
-  [...S.pages].sort((a,b) => a.score - b.score).forEach(p => L.push(`| ${p.score} | ${p.url} | ${p.status||'ERR'} | ${p.titleLength??''} | ${p.descriptionLength??''} | ${p.h1??''} | ${p.high} | ${p.med} | ${p.low} | ${(p.topFixes||[]).join('; ').replace(/\|/g,'\\|')} |`));
+  const ids = Object.keys(CAT_SHORT);
+  L.push('## Pages', '', `| Score | Grade | URL | Status | ${ids.map(id => CAT_SHORT[id]).join(' | ')} | Title len | Desc len | H1 | High | Med | Low | Top issues |`, `|${'---|'.repeat(ids.length + 11)}`);
+  [...S.pages].sort((a,b) => a.score - b.score).forEach(p => { const cats = Object.fromEntries((p.categories||[]).map(c => [c.id, c.score]));
+    L.push(`| ${p.score} | ${p.grade} | ${p.url} | ${p.status||'ERR'} | ${ids.map(id => cats[id] ?? '—').join(' | ')} | ${p.titleLength??''} | ${p.descriptionLength??''} | ${p.h1??''} | ${p.high} | ${p.med} | ${p.low} | ${(p.topFixes||[]).join('; ').replace(/\|/g,'\\|')} |`); });
   return L.join('\n');
 }
 async function copySite(btn){ await navigator.clipboard.writeText(siteMarkdown()); btn.textContent='copied ✓'; setTimeout(()=>btn.textContent='Copy site report (Markdown)',1500); }
 function downloadSiteCsv(){
   const cols = ['url','status','score','grade','title','titleLength','description','descriptionLength','canonical','h1','words','images','missingAlt','ogImage','jsonld','noindex','high','med','low','topFixes'];
   const q = (v) => '"' + String(Array.isArray(v)?v.join('; '):v??'').replace(/"/g,'""') + '"';
-  const csv = [cols.join(','), ...siteState.pages.map(p => cols.map(c => q(p[c])).join(','))].join('\n');
+  const ids = Object.keys(CAT_SHORT);
+  const csv = [[...cols, ...ids.map(id => CAT_SHORT[id] + ' score')].join(','), ...siteState.pages.map(p => { const cats = Object.fromEntries((p.categories||[]).map(c => [c.id, c.score])); return [...cols.map(c => q(p[c])), ...ids.map(id => q(cats[id]))].join(','); })].join('\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download = 'site-audit.csv'; a.click();
 }
 

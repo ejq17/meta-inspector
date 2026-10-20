@@ -217,10 +217,18 @@ function audit(d, extras) {
   return { overall, grade: grade(overall), categories: cats, fixes, generatedAt: new Date().toISOString() };
 }
 
-function toMarkdown(d, a, { forAI = false } = {}) {
+// Every crawled page's rating, worst first — shared by the Markdown and printable reports.
+const CAT_SHORT = { seo: 'SEO', social: 'Social', structured: 'Schema', a11y: 'A11y', tech: 'Tech', ai: 'AI' };
+function sitePageRows(site) {
+  return [...site.pages].sort((x, y) => x.score - y.score).map((p) => ({
+    ...p, cats: Object.fromEntries((p.categories || []).map((c) => [c.id, c])),
+  }));
+}
+
+function toMarkdown(d, a, { forAI = false, site = null } = {}) {
   const L = [];
   if (forAI) {
-    L.push('You are helping me improve the metadata, SEO, social sharing, structured data, accessibility and AI-search readiness of a website I am building. Below is an automated audit of one page plus the raw <head> HTML.', '', 'Please: (1) fix every HIGH and MED finding, (2) rewrite the <head> as a complete corrected block I can paste in, (3) write any JSON-LD needed, (4) suggest an llms.txt and robots.txt if missing, (5) explain anything you changed that was not in the findings. Keep my existing content and branding; ask if something is ambiguous.', '', '---', '');
+    L.push('You are helping me improve the metadata, SEO, social sharing, structured data, accessibility and AI-search readiness of a website I am building. Below is an automated audit of one page (plus, if present, the ratings of every other crawled page on the site) and the raw <head> HTML.', '', 'Please: (1) fix every HIGH and MED finding, (2) rewrite the <head> as a complete corrected block I can paste in, (3) write any JSON-LD needed, (4) suggest an llms.txt and robots.txt if missing, (5) explain anything you changed that was not in the findings. Keep my existing content and branding; ask if something is ambiguous.', '', '---', '');
   }
   L.push(`# Metadata audit — ${d.core.title || d.http.finalUrl}`, '', `- URL: ${d.http.finalUrl}`, `- Fetched: ${d.fetchedAt}`, `- HTTP: ${d.http.status} in ${d.http.totalMs} ms`, `- **Overall score: ${a.overall}/100 (${a.grade})**`, '');
   L.push('## Scores', '', '| Category | Score | Grade | Weight |', '|---|---|---|---|');
@@ -234,6 +242,14 @@ function toMarkdown(d, a, { forAI = false } = {}) {
     c.findings.forEach((f) => L.push(`- ${f.severity === 'pass' ? '✅' : f.severity === 'high' ? '🔴' : f.severity === 'med' ? '🟠' : '🟡'} ${f.msg}`));
     L.push('');
   });
+  if (site && site.pages.length) {
+    const s = site.summary;
+    L.push(`## Site pages — ${s.pages} crawled · average ${s.avgScore}/100`, '', `_Crawled ${site.at}. Errors: ${s.errors} · missing title: ${s.missingTitle} · missing description: ${s.missingDescription} · missing og:image: ${s.missingOgImage} · no h1: ${s.noH1} · noindex: ${s.noindex} · duplicate titles: ${s.duplicateTitles.length} · duplicate descriptions: ${s.duplicateDescriptions.length}_`, '');
+    const ids = Object.keys(CAT_SHORT);
+    L.push(`| Score | Grade | URL | Status | ${ids.map((id) => CAT_SHORT[id]).join(' | ')} | High | Med | Low | Top issues |`, `|${'---|'.repeat(ids.length + 8)}`);
+    sitePageRows(site).forEach((p) => L.push(`| ${p.score} | ${p.grade} | ${p.url} | ${p.status || 'ERR'} | ${ids.map((id) => p.cats[id]?.score ?? '—').join(' | ')} | ${p.high} | ${p.med} | ${p.low} | ${(p.topFixes || []).join('; ').replace(/\|/g, '\\|')} |`));
+    L.push('');
+  }
   const ai = a.categories.find((c) => c.id === 'ai');
   L.push('## AI crawler access (from robots.txt)', '', '| Crawler | Owner | Status |', '|---|---|---|');
   ai.bots.forEach((b) => L.push(`| ${b.ua} | ${b.owner} | ${b.verdict}${b.paths ? ` (${b.paths.join(', ')})` : ''} |`));
@@ -253,4 +269,4 @@ function toMarkdown(d, a, { forAI = false } = {}) {
   return L.join('\n');
 }
 
-module.exports = { audit, toMarkdown, AI_BOTS };
+module.exports = { audit, toMarkdown, sitePageRows, CAT_SHORT, AI_BOTS };

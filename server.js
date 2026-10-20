@@ -336,13 +336,43 @@ app.get('/api/inspect', async (req, res) => {
   catch (err) { res.status(502).json({ error: friendlyError(err, url) }); }
 });
 
+// Image proxy for previews (og:image, icons, <img>) so the UI isn't blocked by CORS, hotlink rules or mixed content.
+const IMG_MAX_BYTES = 15 * 1024 * 1024;
+app.get('/api/img', async (req, res) => {
+  const raw = (req.query.url || '').trim();
+  let target;
+  try { target = new URL(raw); } catch { return res.status(400).send('Invalid URL'); }
+  if (!/^https?:$/.test(target.protocol)) return res.status(400).send('Only http(s) URLs');
+  try {
+    const r = await fetch(target.href, {
+      redirect: 'follow',
+      headers: { 'User-Agent': UA, Accept: 'image/avif,image/webp,image/svg+xml,image/*,*/*;q=0.8', Referer: target.origin + '/' },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!r.ok) return res.status(r.status).send(`Upstream ${r.status}`);
+    const type = r.headers.get('content-type') || '';
+    const looksLikeImage = /^image\//i.test(type) || /\.(png|jpe?g|gif|webp|avif|svg|ico|bmp)$/i.test(target.pathname);
+    if (!looksLikeImage) return res.status(415).send(`Not an image (${type || 'no content-type'})`);
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length > IMG_MAX_BYTES) return res.status(413).send('Image too large');
+    res.set({
+      'Content-Type': /^image\//i.test(type) ? type : 'application/octet-stream',
+      'Cache-Control': 'private, max-age=60',
+      'X-Content-Type-Options': 'nosniff',
+      // SVGs can carry script; keep them inert when opened directly.
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+    });
+    res.send(buf);
+  } catch (err) { res.status(502).send(friendlyError(err, target.href)); }
+});
+
 // Markdown report (?ai=1 adds the prompt preamble). Download with ?download=1.
 app.get('/api/report.md', async (req, res) => {
   let url = (req.query.url || '').trim();
   try { url = normalizeUrl(url); } catch { return res.status(400).send('Invalid URL'); }
   try {
     const d = await inspectUrl(url);
-    const md = toMarkdown(d, d.audit, { forAI: req.query.ai === '1' });
+    const md = toMarkdown(d, d.audit, { forAI: req.query.ai === '1', site: siteFor(d) });
     res.type('text/markdown');
     if (req.query.download === '1') res.attachment(`meta-report-${new URL(d.http.finalUrl).host.replace(/[^a-z0-9.-]/gi, '_')}.md`);
     res.send(md);
@@ -353,9 +383,13 @@ app.get('/api/report.md', async (req, res) => {
 app.get('/report', async (req, res) => {
   let url = (req.query.url || '').trim();
   try { url = normalizeUrl(url); } catch { return res.status(400).send('Invalid URL'); }
-  try { const d = await inspectUrl(url); res.type('html').send(renderPrintReport(d, d.audit)); }
+  try { const d = await inspectUrl(url); res.type('html').send(renderPrintReport(d, d.audit, siteFor(d))); }
   catch (err) { res.status(502).type('text').send(friendlyError(err, url)); }
 });
+
+// Latest completed crawl per origin, so the page reports can include every crawled page's rating.
+const crawlCache = new Map();
+const siteFor = (d) => crawlCache.get(new URL(d.http.finalUrl).origin) || null;
 
 // Crawl every same-host page reachable from the start URL (+ sitemap). Streams NDJSON progress lines.
 app.get('/api/crawl', async (req, res) => {
@@ -380,7 +414,7 @@ app.get('/api/crawl', async (req, res) => {
         const u = queue.shift(); active++;
         inspectUrl(u).then((d) => {
           const a = d.audit;
-          const page = { url: u, finalUrl: d.http.finalUrl, status: d.http.status, ms: d.http.totalMs, title: d.core.title, titleLength: d.core.titleLength, description: d.core.description, descriptionLength: d.core.descriptionLength, canonical: d.core.canonical, h1: d.outline.h1Count, words: d.outline.wordCount, images: d.outline.images.total, missingAlt: d.outline.images.missingAlt, ogImage: !!d.social.og['og:image'], jsonld: d.structured.jsonld.length, noindex: !!(d.core.robots && /noindex/i.test(d.core.robots)), score: a.overall, grade: a.grade, categories: Object.fromEntries(a.categories.map((c) => [c.id, c.score])), high: a.fixes.filter((f) => f.severity === 'high').length, med: a.fixes.filter((f) => f.severity === 'med').length, low: a.fixes.filter((f) => f.severity === 'low').length, topFixes: a.fixes.slice(0, 3).map((f) => f.msg) };
+          const page = { url: u, finalUrl: d.http.finalUrl, status: d.http.status, ms: d.http.totalMs, title: d.core.title, titleLength: d.core.titleLength, description: d.core.description, descriptionLength: d.core.descriptionLength, canonical: d.core.canonical, h1: d.outline.h1Count, words: d.outline.wordCount, images: d.outline.images.total, missingAlt: d.outline.images.missingAlt, ogImage: !!d.social.og['og:image'], jsonld: d.structured.jsonld.length, noindex: !!(d.core.robots && /noindex/i.test(d.core.robots)), score: a.overall, grade: a.grade, categories: a.categories.map((c) => ({ id: c.id, name: c.name, score: c.score, grade: c.grade })), high: a.fixes.filter((f) => f.severity === 'high').length, med: a.fixes.filter((f) => f.severity === 'med').length, low: a.fixes.filter((f) => f.severity === 'low').length, topFixes: a.fixes.slice(0, 3).map((f) => f.msg) };
           pages.push(page);
           const ct = d.http.headers['content-type'] || '';
           if (/text\/html/i.test(ct)) for (const l of d.internalLinks) if (!seen.has(l) && seen.size < max * 3) { seen.add(l); queue.push(l); }
@@ -405,6 +439,7 @@ app.get('/api/crawl', async (req, res) => {
     duplicateDescriptions: Object.entries(dupDescs).filter(([, v]) => v.length > 1).map(([d, v]) => ({ description: d, urls: v })),
     missingTitle: ok.filter((p) => !p.title).length, missingDescription: ok.filter((p) => !p.description).length, missingOgImage: ok.filter((p) => !p.ogImage).length, noindex: ok.filter((p) => p.noindex).length, noH1: ok.filter((p) => p.h1 === 0).length, truncated: queue.length > 0,
   };
+  if (!closed) crawlCache.set(new URL(url).origin, { at: new Date().toISOString(), summary, pages });
   send({ type: 'done', summary, pages });
   res.end();
 });
