@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meta Inspector</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%2318181b'/><text x='50' y='68' font-size='52' text-anchor='middle' fill='%23f4d35e' font-family='monospace' font-weight='700'>&lt;/&gt;</text></svg>">
+<style>
+:root{
+  --bg:#0f1012;--panel:#17181b;--panel2:#1e2024;--line:#2a2d33;--text:#e6e7ea;--muted:#8b8f98;--dim:#5c6069;
+  --accent:#f4d35e;--ok:#4ade80;--warn:#fbbf24;--err:#f87171;--info:#60a5fa;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+}
+@media (prefers-color-scheme: light){:root{--bg:#f6f6f7;--panel:#fff;--panel2:#f0f0f2;--line:#e2e3e7;--text:#17181b;--muted:#5f636d;--dim:#9a9ea8;--accent:#b8860b;--ok:#15803d;--warn:#b45309;--err:#b91c1c;--info:#1d4ed8}}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 var(--sans)}
+a{color:var(--info);text-decoration:none}a:hover{text-decoration:underline}
+header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+header h1{font-size:15px;margin:0 8px 0 0;font-family:var(--mono);letter-spacing:.02em}header h1 span{color:var(--accent)}
+form{display:flex;gap:8px;flex:1;min-width:320px}
+input[type=url],input[type=text]{flex:1;background:var(--bg);border:1px solid var(--line);color:var(--text);padding:9px 12px;border-radius:8px;font:14px var(--mono);outline:none}
+input:focus{border-color:var(--accent)}
+button{background:var(--accent);color:#1a1a1a;border:0;padding:9px 16px;border-radius:8px;font-weight:600;cursor:pointer;font-size:14px}
+button.ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}button.ghost.on{color:var(--accent);border-color:var(--accent)}
+.status{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;gap:10px;align-items:center}
+.status .dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}.status .dot.ok{background:var(--ok)}.status .dot.err{background:var(--err)}.status .dot.busy{background:var(--warn);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.3}}
+main{max-width:1280px;margin:0 auto;padding:20px}
+.empty{color:var(--muted);text-align:center;padding:80px 20px;font-family:var(--mono)}
+.empty code{color:var(--accent)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;overflow-x:auto}
+.tabs button{background:none;color:var(--muted);border:0;border-bottom:2px solid transparent;border-radius:0;padding:10px 14px;font-weight:500;white-space:nowrap}
+.tabs button.active{color:var(--text);border-bottom-color:var(--accent)}
+.tabs button .n{font-family:var(--mono);font-size:11px;margin-left:6px;padding:1px 6px;border-radius:10px;background:var(--panel2);color:var(--muted)}
+.tabs button .n.err{background:var(--err);color:#fff}.tabs button .n.warn{background:var(--warn);color:#1a1a1a}
+.panel{display:none}.panel.active{display:block}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+.card.wide{grid-column:1/-1}
+.card h3{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.card h3 .n{font-family:var(--mono);color:var(--dim);letter-spacing:0;text-transform:none}
+table.kv{width:100%;border-collapse:collapse;font-size:13px}
+.kv td{padding:6px 0;border-top:1px solid var(--line);vertical-align:top;word-break:break-word}
+.kv tr:first-child td{border-top:0}
+.kv td:first-child{color:var(--muted);font-family:var(--mono);font-size:12px;width:36%;padding-right:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kv td:last-child{font-family:var(--mono);font-size:12.5px}
+.null{color:var(--dim);font-style:italic}
+.len{font-size:11px;color:var(--dim);margin-left:6px}.len.bad{color:var(--warn)}
+.pill{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:10px;background:var(--panel2);color:var(--muted);margin:2px 4px 2px 0}
+.pill.ok{color:var(--ok)}.pill.err{color:var(--err)}.pill.warn{color:var(--warn)}
+.warnlist{list-style:none;padding:0;margin:0}
+.warnlist li{display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:13px}
+.warnlist li:first-child{border-top:0}
+.lvl{font-family:var(--mono);font-size:10px;font-weight:700;text-transform:uppercase;padding:2px 6px;border-radius:4px;height:fit-content;letter-spacing:.05em}
+.lvl.error{background:var(--err);color:#fff}.lvl.warn{background:var(--warn);color:#1a1a1a}.lvl.info{background:var(--info);color:#fff}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto;font:12px/1.5 var(--mono);margin:0;max-height:520px;white-space:pre-wrap;word-break:break-word}
+.jk{color:var(--info)}.js{color:var(--ok)}.jn{color:var(--warn)}.jb{color:var(--accent)}
+/* previews */
+.previews{display:grid;align-items:start;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.pv{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+.pv h4{margin:0 0 12px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.pv-google{font-family:arial,sans-serif;background:#fff;color:#202124;border-radius:8px;padding:14px;max-width:600px}
+.pv-google .u{font-size:12px;color:#4d5156;display:flex;gap:8px;align-items:center}
+.pv-google .u img{width:18px;height:18px;border-radius:50%;background:#eee}
+.pv-google .t{color:#1a0dab;font-size:18px;margin:4px 0 2px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.pv-google .d{font-size:13px;color:#4d5156;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pv-card{background:#fff;color:#1c1e21;border:1px solid #dadde1;border-radius:10px;overflow:hidden;font-family:Helvetica,Arial,sans-serif}
+.pv-card .img{aspect-ratio:1.91/1;background:#e4e6eb center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#8a8d91;font-size:12px}
+.pv-card .img.sq{aspect-ratio:auto;height:120px;width:120px;float:left;margin-right:12px}
+.pv-card .body{padding:10px 12px;background:#f0f2f5}
+.pv-card .h{font-size:11px;color:#65676b;text-transform:uppercase}
+.pv-card .t{font-weight:600;font-size:15px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pv-card .d{font-size:13px;color:#65676b;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.pv-x{background:#000;color:#e7e9ea;border:1px solid #2f3336;border-radius:16px;overflow:hidden;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;position:relative}
+.pv-x .img{aspect-ratio:1.91/1;background:#16181c center/cover no-repeat}
+.pv-x .lbl{position:absolute;left:12px;bottom:40px;background:rgba(0,0,0,.77);color:#fff;font-size:13px;padding:2px 6px;border-radius:4px;max-width:90%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pv-x .h{font-size:13px;color:#71767b;padding:8px 12px}
+.pv-slack{background:#fff;color:#1d1c1d;border-left:4px solid #e8e8e8;padding:8px 12px;border-radius:4px;font-family:Lato,-apple-system,sans-serif}
+.pv-slack .s{font-size:14px;font-weight:700;display:flex;gap:6px;align-items:center}.pv-slack .s img{width:16px;height:16px}
+.pv-slack .t{color:#1264a3;font-weight:700;font-size:15px;margin:2px 0}.pv-slack .d{font-size:14px;line-height:1.4}
+.pv-slack .img{margin-top:8px;max-width:360px;aspect-ratio:1.91/1;background:#f2f2f2 center/cover no-repeat;border-radius:8px}
+.imgmeta{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:8px}
+.tree{font-family:var(--mono);font-size:12.5px;line-height:1.7}
+.tree div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tree .tag{color:var(--accent);margin-right:8px;font-weight:600}
+.tree .h1 .tag{color:var(--ok)}
+.chain{font-family:var(--mono);font-size:12px}.chain div{padding:4px 0;display:flex;gap:10px}
+.chain .st{width:36px;font-weight:700}.chain .ms{color:var(--muted);width:60px}
+.st.ok{color:var(--ok)}.st.rd{color:var(--warn)}.st.bad{color:var(--err)}
+.iconrow{display:flex;gap:10px;flex-wrap:wrap}
+.icon{display:flex;flex-direction:column;align-items:center;gap:6px;background:var(--panel2);padding:10px;border-radius:8px;font-family:var(--mono);font-size:10.5px;color:var(--muted);text-align:center;max-width:120px}
+.icon img{width:48px;height:48px;object-fit:contain;background:repeating-conic-gradient(#8882 0 25%,transparent 0 50%) 0 0/12px 12px;border-radius:6px}
+.filelist{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.toolbar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.toolbar .sp{flex:1}
+kbd{font:11px var(--mono);background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--muted)}
+.err-banner{background:color-mix(in srgb,var(--err) 15%,var(--panel));border:1px solid var(--err);color:var(--text);padding:14px 16px;border-radius:10px;font-family:var(--mono);font-size:13px;margin-bottom:16px}
+.muted{color:var(--muted)}
+details summary{cursor:pointer;color:var(--muted);font-size:12px;font-family:var(--mono);margin-bottom:8px}
+.trunc{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
+
+.scorebig{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.ring{width:96px;height:96px;border-radius:50%;display:grid;place-items:center;font:700 30px var(--mono);border:6px solid;flex:none}
+.ring small{font-size:10px;font-weight:600;letter-spacing:.08em;margin-top:-6px}
+.cats{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;flex:1}
+.catbox{background:var(--panel2);border-radius:10px;padding:10px 12px;cursor:pointer;border:1px solid transparent}.catbox:hover{border-color:var(--line)}
+.catbox b{font:700 20px var(--mono)}.catbox small{display:block;color:var(--muted);font-size:11px}
+.bar{height:5px;background:var(--line);border-radius:3px;margin-top:6px}.bar i{display:block;height:100%;border-radius:3px}
+.sev{font:700 10px/1 var(--mono);color:#fff;padding:3px 6px;border-radius:4px;height:fit-content;letter-spacing:.05em;text-transform:uppercase;flex:none}
+.sev.high{background:var(--err)}.sev.med{background:var(--warn);color:#1a1a1a}.sev.low{background:#a16207}.sev.pass{background:var(--ok);color:#1a1a1a}
+.fixlist li{display:flex;gap:10px;padding:9px 0;border-top:1px solid var(--line)}.fixlist li:first-child{border-top:0}.fixlist .fx{color:var(--muted);font-size:12px;margin-top:2px}
+.gA{color:var(--ok)}.gB{color:#a3e635}.gC{color:var(--warn)}.gD{color:#fb923c}.gF{color:var(--err)}
+.bots td:last-child{font-weight:600}
+table.site{width:100%;border-collapse:collapse;font-size:12px;font-family:var(--mono)}.site th{text-align:left;color:var(--muted);font-weight:500;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap;cursor:pointer;user-select:none}.site td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.site tr:hover td{background:var(--panel2)}.site td.sc{font-weight:700}
+progress{width:100%;height:6px;accent-color:var(--accent)}
+.hint{color:var(--dim);font-size:11px}
+</style>
+</head>
+<body>
+<header>
+  <h1>&lt;/&gt; <span>meta</span> inspector</h1>
+  <form id="f">
+    <input type="url" id="url" placeholder="http://localhost:3000" autocomplete="off" spellcheck="false" list="hist">
+    <datalist id="hist"></datalist>
+    <button type="submit">Inspect</button>
+    <button type="button" class="ghost" id="auto" title="Re-fetch every few seconds while you edit">↻ Auto</button>
+    <input type="text" id="interval" value="3" style="width:52px;flex:none;text-align:center" title="seconds">
+  </form>
+  <div class="status"><span class="dot" id="dot"></span><span id="stat">idle</span></div>
+</header>
+<main>
+  <div class="empty" id="empty">Enter the URL of your local dev server above.<br><br>Examples: <code>localhost:3000</code> · <code>127.0.0.1:5173/about</code> · <code>http://mysite.test</code><br><br><span style="color:var(--dim)">Tip: press <kbd>Enter</kbd> to inspect, <kbd>R</kbd> to re-fetch, <kbd>1–9</kbd> to switch tabs</span></div>
+  <div id="result" style="display:none">
+    <div id="errbox"></div>
+    <div class="tabs" id="tabs"></div>
+    <div id="panels"></div>
+  </div>
+  <footer style="text-align:center;color:var(--dim);font:11px var(--mono);padding:30px 0 20px">Meta Inspector · built by EJ · MIT</footer>
+</main>
+<script>
+const $ = (s, r=document) => r.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nul = (v) => v == null || v === '' ? '<span class="null">—</span>' : esc(v);
+const urlIn = $('#url'), dot = $('#dot'), stat = $('#stat'), autoBtn = $('#auto');
+let data = null, timer = null, activeTab = localStorage.getItem('mi.tab') || 'report', lastJson = '';
+const siteState = { pages: [], summary: null, running: false, origin: null, log: '' };
+
+// history
+const hist = JSON.parse(localStorage.getItem('mi.hist') || '[]');
+const renderHist = () => $('#hist').innerHTML = hist.map(h => `<option value="${esc(h)}">`).join('');
+renderHist();
+if (hist[0]) urlIn.value = hist[0];
+const qs = new URLSearchParams(location.search).get('url'); if (qs) urlIn.value = qs;
+
+function setStatus(kind, msg){ dot.className = 'dot ' + kind; stat.textContent = msg; }
+
+async function inspect(){
+  let u = urlIn.value.trim(); if (!u) return;
+  setStatus('busy', 'fetching…');
+  try {
+    const r = await fetch('/api/inspect?url=' + encodeURIComponent(u));
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    const s = JSON.stringify(j); const changed = s !== lastJson; lastJson = s;
+    data = j;
+    const o = new URL(j.http.finalUrl).origin; if (siteState.origin !== o) { siteState.origin = o; siteState.pages = []; siteState.summary = null; }
+    if (!hist.includes(u)) { hist.unshift(u); hist.splice(12); localStorage.setItem('mi.hist', JSON.stringify(hist)); renderHist(); }
+    history.replaceState(null, '', '?url=' + encodeURIComponent(u));
+    $('#errbox').innerHTML = '';
+    render(changed);
+    setStatus('ok', `${j.http.status} · ${j.http.totalMs} ms · ${new Date(j.fetchedAt).toLocaleTimeString()}${changed ? '' : ' · unchanged'}`);
+  } catch (e) {
+    setStatus('err', 'error');
+    $('#empty').style.display = 'none'; $('#result').style.display = '';
+    $('#errbox').innerHTML = `<div class="err-banner">⚠ ${esc(e.message)}</div>`;
+  }
+}
+
+$('#f').addEventListener('submit', e => { e.preventDefault(); inspect(); });
+autoBtn.addEventListener('click', () => {
+  if (timer) { clearInterval(timer); timer = null; autoBtn.classList.remove('on'); autoBtn.textContent = '↻ Auto'; return; }
+  const s = Math.max(1, parseFloat($('#interval').value) || 3);
+  inspect(); timer = setInterval(inspect, s * 1000); autoBtn.classList.add('on'); autoBtn.textContent = `↻ Auto (${s}s)`;
+});
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'r' || e.key === 'R') inspect();
+  const n = parseInt(e.key); if (n >= 1 && n <= 9) { const t = $('#tabs').children[n-1]; if (t) t.click(); }
+});
+
+// ---------- rendering
+const TABS = ['report','ai','site','overview','social','structured','links','outline','http','files','raw'];
+function render(changed){
+  $('#empty').style.display = 'none'; $('#result').style.display = '';
+  const d = data;
+  const errs = d.warnings.filter(w => w.level==='error').length, warns = d.warnings.filter(w => w.level==='warn').length;
+  const A = d.audit;
+  const counts = {
+    report: `<span class="n g${A.grade}" style="font-weight:700">${A.overall}</span>`,
+    ai: `<span class="n g${A.categories.find(c=>c.id==='ai').grade}" style="font-weight:700">${A.categories.find(c=>c.id==='ai').score}</span>`,
+    site: siteState.pages.length ? `<span class="n">${siteState.pages.length}</span>` : '',
+    overview: errs ? `<span class="n err">${errs}</span>` : warns ? `<span class="n warn">${warns}</span>` : `<span class="n">${d.warnings.length}</span>`,
+    social: `<span class="n">${Object.keys(d.social.og).length + Object.keys(d.social.twitter).length}</span>`,
+    structured: `<span class="n">${d.structured.jsonld.length + d.structured.microdata.length + d.structured.rdfa.length}</span>`,
+    links: `<span class="n">${d.linkStats.total}</span>`,
+    outline: `<span class="n">${d.outline.headings.length}</span>`,
+    http: `<span class="n">${d.http.status}</span>`, files: '', raw: ''
+  };
+  $('#tabs').innerHTML = TABS.map(t => `<button data-t="${t}" class="${t===activeTab?'active':''}">${t[0].toUpperCase()+t.slice(1)}${counts[t]}</button>`).join('');
+  $('#tabs').querySelectorAll('button').forEach(b => b.onclick = () => { activeTab = b.dataset.t; localStorage.setItem('mi.tab', activeTab); render(false); });
+  const scroll = window.scrollY;
+  const builders = { report, ai, site, overview, social, structured, links, outline, http, files, raw };
+  $('#panels').innerHTML = `<div class="panel active">${builders[activeTab](d)}</div>`;
+  if (activeTab === 'files' && (changed || !filesLoaded)) loadFiles();
+  window.scrollTo(0, scroll);
+}
+
+const kv = (rows) => `<table class="kv">${rows.map(([k,v]) => `<tr><td title="${esc(k)}">${esc(k)}</td><td>${v}</td></tr>`).join('')}</table>`;
+const lenPill = (n, lo, hi) => `<span class="len ${n<lo||n>hi?'bad':''}">${n} chars</span>`;
+const link = (u) => u ? `<a href="${esc(u)}" target="_blank" rel="noopener" class="trunc" title="${esc(u)}">${esc(u)}</a>` : nul(null);
+const boolPill = (b, t, f) => b ? `<span class="pill ok">${t}</span>` : `<span class="pill err">${f}</span>`;
+const val = (v) => Array.isArray(v) ? v.map(x => `<div>${esc(x)}</div>`).join('') : nul(v);
+const img = (u) => '/api/img?url=' + encodeURIComponent(u);
+
+
+const gcls = (g) => 'g' + g;
+const gcol = (g) => ({A:'var(--ok)',B:'#a3e635',C:'var(--warn)',D:'#fb923c',F:'var(--err)'}[g]);
+const sevIcon = {high:'high',med:'med',low:'low',pass:'pass'};
+
+function exportBar(){
+  const u = encodeURIComponent(data.http.finalUrl);
+  return `<div class="toolbar">
+    <button onclick="copyReport(true,this)">Copy for AI</button>
+    <button class="ghost" onclick="copyReport(false,this)">Copy Markdown</button>
+    <a class="ghost" style="padding:9px 16px;border-radius:8px;border:1px solid var(--line);color:var(--muted);font-weight:600" href="/api/report.md?url=${u}&download=1">Download .md</a>
+    <a class="ghost" style="padding:9px 16px;border-radius:8px;border:1px solid var(--line);color:var(--muted);font-weight:600" href="/report?url=${u}" target="_blank" rel="noopener">Printable / PDF ↗</a>
+    <button class="ghost" onclick="navigator.clipboard.writeText(JSON.stringify(data.audit,null,2));this.textContent='copied'">Copy JSON</button>
+    <span class="sp"></span><span class="hint">“Copy for AI” includes a prompt + the raw &lt;head&gt; — paste straight into Claude/ChatGPT.</span>
+  </div>`;
+}
+async function copyReport(forAI, btn){
+  const r = await fetch(`/api/report.md?url=${encodeURIComponent(data.http.finalUrl)}${forAI?'&ai=1':''}`);
+  await navigator.clipboard.writeText(await r.text());
+  const t = btn.textContent; btn.textContent = 'copied ✓'; setTimeout(() => btn.textContent = t, 1500);
+}
+
+function report(d){
+  const A = d.audit;
+  return exportBar() + `<div class="grid">
+    <div class="card wide"><div class="scorebig">
+      <div class="ring" style="border-color:${gcol(A.grade)};color:${gcol(A.grade)}">${A.overall}<small>${A.grade}</small></div>
+      <div class="cats">${A.categories.map(c => `<div class="catbox" onclick="document.getElementById('cat-${c.id}').scrollIntoView({behavior:'smooth'})"><b class="${gcls(c.grade)}">${c.score}</b> <span class="${gcls(c.grade)}" style="font-weight:700">${c.grade}</span><small>${esc(c.name)} · ${c.weight}%</small><div class="bar"><i style="width:${c.score}%;background:${gcol(c.grade)}"></i></div></div>`).join('')}</div>
+    </div></div>
+    <div class="card wide"><h3>Prioritized fixes <span class="n">${A.fixes.length}</span></h3>
+      ${A.fixes.length ? `<ol class="warnlist fixlist" style="padding:0">${A.fixes.map(f => `<li><span class="sev ${f.severity}">${f.severity}</span><div><div><b>${esc(f.msg)}</b> <span class="muted">— ${esc(f.category)}</span></div>${f.fix?`<div class="fx">${esc(f.fix)}</div>`:''}</div></li>`).join('')}</ol>` : '<span class="muted">Nothing to fix. Ship it.</span>'}
+    </div>
+    ${A.categories.map(c => `<div class="card" id="cat-${c.id}"><h3>${esc(c.name)} <span class="n ${gcls(c.grade)}" style="font-weight:700">${c.score} · ${c.grade}</span></h3>
+      <ul class="warnlist">${c.findings.map(f => `<li><span class="sev ${f.severity}">${f.severity}</span><div>${esc(f.msg)}${f.fix&&f.severity!=='pass'?`<div class="fx muted" style="font-size:12px">${esc(f.fix)}</div>`:''}</div></li>`).join('') || '<li class="muted">no checks triggered</li>'}</ul></div>`).join('')}
+  </div>`;
+}
+
+function ai(d){
+  const c = d.audit.categories.find(x => x.id === 'ai');
+  const vcol = { allowed:'var(--ok)', blocked:'var(--err)', partial:'var(--warn)' };
+  const robots = d.site.robots;
+  return exportBar() + `<div class="grid">
+    <div class="card wide"><div class="scorebig"><div class="ring" style="border-color:${gcol(c.grade)};color:${gcol(c.grade)}">${c.score}<small>${c.grade}</small></div>
+      <div><b>AI readiness (GEO)</b><div class="muted" style="font-size:12px;max-width:720px;margin-top:4px">How well AI search engines and assistants (ChatGPT, Claude, Perplexity, Gemini, Apple Intelligence) can crawl, understand, attribute and cite this page. Checks: crawler access in robots.txt, llms.txt, server-rendered content, entity + authorship schema, answer-shaped headings, and snippet/citation restrictions.</div></div></div></div>
+    <div class="card"><h3>Findings</h3><ul class="warnlist">${c.findings.map(f => `<li><span class="sev ${f.severity}">${f.severity}</span><div>${esc(f.msg)}${f.fix&&f.severity!=='pass'?`<div class="fx muted" style="font-size:12px">${esc(f.fix)}</div>`:''}</div></li>`).join('')}</ul></div>
+    <div class="card"><h3>llms.txt</h3>${kv([['/llms.txt', c.llms.txt ? '<span class="pill ok">present</span>' : '<span class="pill warn">missing</span>'],['/llms-full.txt', c.llms.full ? '<span class="pill ok">present</span>' : '<span class="pill">missing (optional)</span>']])}
+      ${c.llms.preview ? `<pre style="margin-top:10px">${esc(c.llms.preview)}</pre>` : `<div class="muted" style="font-size:12px;margin-top:10px">A Markdown file at <code>/llms.txt</code> that tells models what the site is and links the pages that matter. Example:</div><pre style="margin-top:8px"># ${esc(d.core.title||'Site name')}
+
+> ${esc(d.core.description||'One-line summary of what this site is.')}
+
+## Pages
+- [Home](${esc(new URL(d.http.finalUrl).origin)}/): what it covers
+- [About](${esc(new URL(d.http.finalUrl).origin)}/about): who runs it</pre>`}
+    </div>
+    <div class="card wide"><h3>AI crawler access <span class="n">robots.txt ${robots.status === 200 ? '<span class="pill ok">200</span>' : '<span class="pill warn">' + (robots.status || 'unreachable') + '</span>'}</span></h3>
+      <table class="kv bots"><tr><td style="width:22%">crawler</td><td style="color:var(--muted);font-family:var(--mono);font-size:12px">owner / purpose</td><td style="width:34%;color:var(--muted);font-family:var(--mono);font-size:12px">verdict for /</td></tr>
+      ${c.bots.map(b => `<tr><td>${esc(b.ua)}</td><td style="color:var(--muted)">${esc(b.owner)}</td><td style="color:${vcol[b.verdict]}">${esc(b.verdict)}${b.paths?` <span class="muted" style="font-weight:400">(${esc(b.paths.join(', '))})</span>`:''} <span class="hint" style="font-weight:400">via ${esc(b.via)}</span></td></tr>`).join('')}</table>
+      ${robots.status === 200 ? `<details style="margin-top:12px"><summary>robots.txt source</summary><pre>${esc(robots.text.slice(0,6000))}</pre></details>` : ''}
+    </div>
+  </div>`;
+}
+
+function site(d){
+  const S = siteState; const origin = new URL(d.http.finalUrl).origin;
+  const sortKey = S.sort || 'score';
+  const rows = [...S.pages].sort((a,b) => sortKey==='url' ? a.url.localeCompare(b.url) : (a[sortKey]??0) - (b[sortKey]??0));
+  const sum = S.summary;
+  return `<div class="toolbar">
+      <button onclick="crawlSite()" ${S.running?'disabled':''}>${S.running ? 'Crawling…' : S.pages.length ? 'Re-crawl site' : 'Crawl whole site'}</button>
+      <label class="muted" style="font-size:12px">max pages <input type="text" id="maxpages" value="${S.max||100}" style="width:56px;text-align:center"></label>
+      ${S.pages.length ? `<button class="ghost" onclick="copySite(this)">Copy site report (Markdown)</button><button class="ghost" onclick="downloadSiteCsv()">Download CSV</button>` : ''}
+      <span class="sp"></span><span class="hint">Follows every same-host link from ${esc(origin)} plus sitemap.xml. Click a row to inspect that page.</span>
+    </div>
+    ${S.running ? `<progress max="${S.max||100}" value="${S.pages.length}"></progress><div class="hint" style="margin:6px 0 12px">${S.pages.length} done · ${S.queued||0} queued</div>` : ''}
+    ${sum ? `<div class="grid" style="margin-bottom:16px"><div class="card wide"><div class="scorebig"><div class="ring" style="border-color:${gcol(grade(sum.avgScore))};color:${gcol(grade(sum.avgScore))}">${sum.avgScore}<small>avg</small></div>
+      <div class="cats">${[['pages', sum.pages],['errors', sum.errors],['no title', sum.missingTitle],['no description', sum.missingDescription],['no og:image', sum.missingOgImage],['no h1', sum.noH1],['noindex', sum.noindex],['dup titles', sum.duplicateTitles.length],['dup descriptions', sum.duplicateDescriptions.length]].map(([k,v]) => `<div class="catbox" style="cursor:default"><b class="${v&&k!=='pages'?'gF':''}">${v}</b><small>${k}</small></div>`).join('')}</div></div>
+      ${sum.truncated ? '<div class="hint" style="margin-top:8px">Stopped at the page limit — raise “max pages” to crawl further.</div>' : ''}</div>
+      ${sum.duplicateTitles.length ? `<div class="card wide"><h3>Duplicate titles</h3>${sum.duplicateTitles.map(t => `<div style="padding:6px 0;border-top:1px solid var(--line)"><b>${esc(t.title)}</b><div class="muted" style="font-family:var(--mono);font-size:12px">${t.urls.map(esc).join('<br>')}</div></div>`).join('')}</div>` : ''}
+      ${sum.duplicateDescriptions.length ? `<div class="card wide"><h3>Duplicate descriptions</h3>${sum.duplicateDescriptions.map(t => `<div style="padding:6px 0;border-top:1px solid var(--line)"><b>${esc(t.description)}</b><div class="muted" style="font-family:var(--mono);font-size:12px">${t.urls.map(esc).join('<br>')}</div></div>`).join('')}</div>` : ''}
+    </div>` : ''}
+    ${S.pages.length ? `<div class="card wide" style="overflow:auto"><table class="site"><thead><tr>${[['score','score'],['url','url'],['status','status'],['title','titleLength'],['desc','descriptionLength'],['h1','h1'],['words','words'],['no alt','missingAlt'],['og:img','ogImage'],['ld','jsonld'],['high','high'],['med','med'],['low','low'],['top issue','high']].map(([l,k]) => `<th onclick="siteState.sort='${k}';render(false)">${l}${sortKey===k?' ▾':''}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map(p => `<tr onclick="urlIn.value='${esc(p.url)}';inspect();activeTab='report';localStorage.setItem('mi.tab','report')"><td class="sc ${gcls(p.grade)}">${p.score}</td><td title="${esc(p.url)}">${esc(p.url.replace(origin,'')||'/')}</td><td class="${p.status===200?'gA':'gF'}">${p.status||'ERR'}</td><td title="${esc(p.title||'')}">${p.status?(p.title?p.titleLength:'<span class="gF">—</span>'):''}</td><td>${p.status?(p.description?p.descriptionLength:'<span class="gF">—</span>'):''}</td><td class="${p.h1===1?'':'gF'}">${p.h1??''}</td><td>${p.words??''}</td><td class="${p.missingAlt?'gF':''}">${p.missingAlt??''}</td><td>${p.status?(p.ogImage?'✓':'<span class="gF">✗</span>'):''}</td><td>${p.jsonld??''}</td><td class="${p.high?'gF':''}">${p.high}</td><td class="${p.med?'gC':''}">${p.med}</td><td>${p.low}</td><td class="muted" title="${esc((p.topFixes||[]).join(' · '))}">${esc(p.topFixes?.[0]||'')}</td></tr>`).join('')}</tbody></table></div>` : (S.running ? '' : '<div class="empty" style="padding:40px">No crawl yet.</div>')}`;
+}
+const grade = (s) => s >= 90 ? 'A' : s >= 80 ? 'B' : s >= 70 ? 'C' : s >= 55 ? 'D' : 'F';
+
+async function crawlSite(){
+  const S = siteState; S.max = Math.max(1, parseInt($('#maxpages')?.value) || 100);
+  S.pages = []; S.summary = null; S.running = true; S.queued = 0; render(false);
+  try {
+    const r = await fetch(`/api/crawl?url=${encodeURIComponent(data.http.finalUrl)}&max=${S.max}`);
+    const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = '';
+    while (true) {
+      const { value, done } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true }); const lines = buf.split('\n'); buf = lines.pop();
+      for (const line of lines) { if (!line.trim()) continue; const m = JSON.parse(line);
+        if (m.type === 'page') { S.pages.push(m.page); S.queued = m.queued; }
+        if (m.type === 'done') { S.summary = m.summary; S.pages = m.pages; }
+        if (activeTab === 'site') render(false);
+      }
+    }
+  } catch (e) { $('#errbox').innerHTML = `<div class="err-banner">Crawl failed: ${esc(e.message)}</div>`; }
+  S.running = false; render(false);
+}
+function siteMarkdown(){
+  const S = siteState, sum = S.summary, origin = new URL(data.http.finalUrl).origin;
+  const L = [`# Site audit — ${origin}`, '', `Pages: ${sum.pages} · errors: ${sum.errors} · average score: ${sum.avgScore}/100`, '', `Missing title: ${sum.missingTitle} · missing description: ${sum.missingDescription} · missing og:image: ${sum.missingOgImage} · no h1: ${sum.noH1} · noindex: ${sum.noindex}`, ''];
+  if (sum.duplicateTitles.length) { L.push('## Duplicate titles', ''); sum.duplicateTitles.forEach(t => L.push(`- "${t.title}"`, ...t.urls.map(u => `  - ${u}`))); L.push(''); }
+  if (sum.duplicateDescriptions.length) { L.push('## Duplicate descriptions', ''); sum.duplicateDescriptions.forEach(t => L.push(`- "${t.description}"`, ...t.urls.map(u => `  - ${u}`))); L.push(''); }
+  L.push('## Pages', '', '| Score | URL | Status | Title len | Desc len | H1 | High | Med | Low | Top issues |', '|---|---|---|---|---|---|---|---|---|---|');
+  [...S.pages].sort((a,b) => a.score - b.score).forEach(p => L.push(`| ${p.score} | ${p.url} | ${p.status||'ERR'} | ${p.titleLength??''} | ${p.descriptionLength??''} | ${p.h1??''} | ${p.high} | ${p.med} | ${p.low} | ${(p.topFixes||[]).join('; ').replace(/\|/g,'\\|')} |`));
+  return L.join('\n');
+}
+async function copySite(btn){ await navigator.clipboard.writeText(siteMarkdown()); btn.textContent='copied ✓'; setTimeout(()=>btn.textContent='Copy site report (Markdown)',1500); }
+function downloadSiteCsv(){
+  const cols = ['url','status','score','grade','title','titleLength','description','descriptionLength','canonical','h1','words','images','missingAlt','ogImage','jsonld','noindex','high','med','low','topFixes'];
+  const q = (v) => '"' + String(Array.isArray(v)?v.join('; '):v??'').replace(/"/g,'""') + '"';
+  const csv = [cols.join(','), ...siteState.pages.map(p => cols.map(c => q(p[c])).join(','))].join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download = 'site-audit.csv'; a.click();
+}
+
+function overview(d){
+  const c = d.core;
+  return `<div class="grid">
+    <div class="card wide"><h3>Warnings <span class="n">${d.warnings.length}</span></h3>
+      ${d.warnings.length ? `<ul class="warnlist">${d.warnings.map(w => `<li><span class="lvl ${w.level}">${w.level}</span><span>${esc(w.msg)}</span></li>`).join('')}</ul>` : '<span class="muted">Nothing flagged. Nice.</span>'}
+    </div>
+    <div class="card"><h3>Core tags</h3>${kv([
+      ['title', nul(c.title) + (c.title ? lenPill(c.titleLength,30,60) : '')],
+      ['description', nul(c.description) + (c.description ? lenPill(c.descriptionLength,70,160) : '')],
+      ['canonical', link(c.canonical)],
+      ['lang / dir', nul(c.lang) + (c.dir ? ' / ' + esc(c.dir) : '')],
+      ['charset', nul(c.charset)],
+      ['viewport', nul(c.viewport)],
+      ['robots', nul(c.robots)], ['googlebot', nul(c.googlebot)],
+      ['doctype', nul(c.doctype)], ['base href', nul(c.baseHref)],
+      ['keywords', nul(c.keywords)], ['author', nul(c.author)], ['generator', nul(c.generator)],
+      ['referrer', nul(c.referrer)], ['color-scheme', nul(c.colorScheme)], ['format-detection', nul(c.formatDetection)],
+    ])}</div>
+    <div class="card"><h3>App / theme</h3>${kv([
+      ['theme-color', c.themeColor.length ? c.themeColor.map(t => `<span class="pill"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${esc(t.content)};vertical-align:middle;margin-right:5px"></span>${esc(t.content)}${t.media?' <span class="muted">'+esc(t.media)+'</span>':''}</span>`).join('') : nul(null)],
+      ['application-name', nul(c.applicationName)],
+      ['apple-mobile-web-app-title', nul(c.appleMobileWebAppTitle)],
+      ['apple-mobile-web-app-capable', nul(c.appleMobileWebAppCapable)],
+      ['apple status bar', nul(c.appleStatusBarStyle)],
+      ['msapplication-TileColor', nul(c.msTileColor)],
+      ['manifest', link(d.links.manifest)],
+    ])}
+    <h3 style="margin-top:16px">Icons <span class="n">${d.icons.length}</span></h3>
+    ${d.icons.length ? `<div class="iconrow">${d.icons.map(i => `<div class="icon"><img src="${img(i.href)}" alt="" onerror="this.style.opacity=.2"><span>${esc(i.rel)}</span><span>${esc(i.sizes||i.type||'')}</span></div>`).join('')}</div>` : '<span class="null">none declared</span>'}
+    </div>
+    <div class="card"><h3>Page stats</h3>${kv([
+      ['words', d.outline.wordCount], ['html size', (d.outline.htmlBytes/1024).toFixed(1)+' KB'],
+      ['headings', d.outline.headings.length + ` (h1: ${d.outline.h1Count})`],
+      ['images', `${d.outline.images.total} <span class="muted">(${d.outline.images.missingAlt} no alt)</span>`],
+      ['links', `${d.linkStats.total} <span class="muted">(${d.linkStats.internal} int / ${d.linkStats.external} ext)</span>`],
+      ['scripts', `${d.links.scripts.length} external, ${d.links.inlineScripts} inline`],
+      ['stylesheets', `${d.links.stylesheets.length} external, ${d.links.inlineStyles} inline`],
+      ['structured data', `${d.structured.jsonld.length} JSON-LD · ${d.structured.microdata.length} microdata · ${d.structured.rdfa.length} RDFa`],
+      ['response', `${d.http.status} · ${d.http.totalMs} ms`],
+    ])}</div>
+  </div>`;
+}
+
+function social(d){
+  const og = d.social.og, tw = d.social.twitter, c = d.core;
+  const pick = (...vs) => vs.find(v => v != null && v !== '') ?? null;
+  const first = (v) => Array.isArray(v) ? v[0] : v;
+  const title = pick(first(og['og:title']), first(tw['twitter:title']), c.title) || 'Untitled';
+  const desc = pick(first(og['og:description']), first(tw['twitter:description']), c.description) || '';
+  const ogImg = first(og['og:image']), twImg = first(tw['twitter:image']) || ogImg;
+  const site = pick(first(og['og:site_name']), first(tw['twitter:site']));
+  let host = ''; try { host = new URL(d.http.finalUrl).host; } catch {}
+  const fav = d.icons.find(i => /icon/i.test(i.rel))?.href;
+  const card = first(tw['twitter:card']) || (ogImg ? 'summary_large_image (fallback)' : 'summary (fallback)');
+  const isLarge = /large/.test(card);
+  const tbl = (obj, label) => `<div class="card"><h3>${label} <span class="n">${Object.keys(obj).length}</span></h3>${Object.keys(obj).length ? kv(Object.entries(obj).map(([k,v]) => [k, /image|url|video|audio/.test(k) && !/width|height|type|alt|secure/.test(k) ? (Array.isArray(v)?v.map(link).join('<br>'):link(v)) : val(v)])) : '<span class="null">none</span>'}</div>`;
+  return `<div class="previews" style="margin-bottom:18px">
+    <div class="pv"><h4>Google</h4><div class="pv-google"><div class="u">${fav?`<img src="${img(fav)}" onerror="this.style.visibility='hidden'">`:''}<span>${esc(site||host)} › ${esc(host)}</span></div><div class="t">${esc(title)}</div><div class="d">${esc(desc||'No description — Google will pull text from the page.')}</div></div></div>
+    <div class="pv"><h4>Facebook / LinkedIn / iMessage</h4><div class="pv-card">${ogImg?`<div class="img" style="background-image:url('${img(ogImg)}')"></div>`:'<div class="img">no og:image</div>'}<div class="body"><div class="h">${esc(host)}</div><div class="t">${esc(title)}</div><div class="d">${esc(desc)}</div></div></div>${ogImg?`<div class="imgmeta" id="ogdim">og:image: loading dimensions…</div>`:''}</div>
+    <div class="pv"><h4>X / Twitter <span class="muted">(${esc(card)})</span></h4><div class="pv-x">${isLarge ? `<div class="img" style="background-image:url('${twImg?img(twImg):''}')"></div><div class="lbl">${esc(title)}</div>` : `<div style="display:flex"><div style="width:120px;height:120px;background:#16181c center/cover no-repeat;flex:none;background-image:url('${twImg?img(twImg):''}')"></div><div style="padding:12px;min-width:0"><div style="font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(title)}</div><div style="font-size:14px;color:#71767b;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(desc)}</div></div></div>`}<div class="h">${esc(host)}</div></div></div>
+    <div class="pv"><h4>Slack / Discord</h4><div class="pv-slack"><div class="s">${fav?`<img src="${img(fav)}" onerror="this.style.visibility='hidden'">`:''}${esc(site||host)}</div><div class="t">${esc(title)}</div><div class="d">${esc(desc)}</div>${ogImg?`<div class="img" style="background-image:url('${img(ogImg)}')"></div>`:''}</div></div>
+  </div>
+  <div class="grid">${tbl(og,'Open Graph')}${tbl(tw,'Twitter card')}${tbl(d.social.article,'Article / profile')}${tbl(d.social.other,'Other (fb:, al:, video:, music:)')}</div>
+  ${ogImg ? `<img src="${img(ogImg)}" style="display:none" onload="document.getElementById('ogdim').textContent='og:image: '+this.naturalWidth+'×'+this.naturalHeight+' px'+(this.naturalWidth<1200?' — recommend ≥1200×630':'')+(Math.abs(this.naturalWidth/this.naturalHeight-1.91)>0.15?' · ratio '+(this.naturalWidth/this.naturalHeight).toFixed(2)+' (1.91 ideal)':'')" onerror="document.getElementById('ogdim').textContent='og:image: failed to load — check the URL is absolute and reachable'">` : ''}`;
+}
+
+function hl(json){
+  return esc(JSON.stringify(json, null, 2)).replace(/("(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(?:\s*:)?|\b(?:true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g, m => {
+    let cls = 'jn'; if (/^"/.test(m)) cls = /:$/.test(m) ? 'jk' : 'js'; else if (/true|false|null/.test(m)) cls = 'jb';
+    return `<span class="${cls}">${m}</span>`;
+  });
+}
+function structured(d){
+  const s = d.structured;
+  const types = (o) => { const t = []; const w = (n) => { if (Array.isArray(n)) return n.forEach(w); if (n && typeof n === 'object') { if (n['@type']) t.push(...[].concat(n['@type'])); Object.values(n).forEach(w); } }; w(o); return [...new Set(t)]; };
+  return `<div class="grid">
+    ${s.jsonld.map((j,i) => `<div class="card wide"><h3>JSON-LD #${i+1} ${j.ok ? types(j.data).map(t=>`<span class="pill">${esc(t)}</span>`).join('') : '<span class="pill err">invalid</span>'}</h3>
+      ${j.ok ? (j.issues.length ? `<ul class="warnlist" style="margin-bottom:12px">${j.issues.map(x=>`<li><span class="lvl info">info</span><span>${esc(x)}</span></li>`).join('')}</ul>` : '<div class="muted" style="margin-bottom:10px;font-size:12px">✓ parses; no missing recommended fields for known types</div>') + `<pre>${hl(j.data)}</pre>` : `<div class="err-banner">${esc(j.error)}</div><pre>${esc(j.raw)}</pre>`}
+    </div>`).join('')}
+    ${s.microdata.map((m,i) => `<div class="card wide"><h3>Microdata #${i+1} <span class="pill">${esc(m.type||'untyped')}</span></h3><pre>${hl(m)}</pre></div>`).join('')}
+    ${s.rdfa.map((m,i) => `<div class="card wide"><h3>RDFa #${i+1} <span class="pill">${esc(m.typeof)}</span></h3><pre>${hl(m)}</pre></div>`).join('')}
+    ${!s.jsonld.length && !s.microdata.length && !s.rdfa.length ? '<div class="card wide"><span class="null">No JSON-LD, microdata, or RDFa found on this page.</span></div>' : ''}
+  </div>`;
+}
+
+function links(d){
+  const L = d.links, s = d.linkStats;
+  const list = (arr, fn) => arr.length ? `<table class="kv">${arr.map(fn).join('')}</table>` : '<span class="null">none</span>';
+  return `<div class="grid">
+    <div class="card"><h3>Anchor stats</h3>${kv([['total', s.total],['internal', s.internal],['external', s.external],['#anchors', s.anchors],['mailto / tel', `${s.mailto} / ${s.tel}`],['rel=nofollow', s.nofollow],['_blank w/o noopener', s.targetBlankNoRel ? `<span class="pill warn">${s.targetBlankNoRel}</span>` : 0]])}</div>
+    <div class="card"><h3>Alternates & feeds</h3>
+      <h3 style="font-size:11px;margin-top:4px">hreflang <span class="n">${L.hreflang.length}</span></h3>${list(L.hreflang, x=>`<tr><td>${esc(x.hreflang)}</td><td>${link(x.href)}</td></tr>`)}
+      <h3 style="font-size:11px;margin-top:14px">feeds <span class="n">${L.feeds.length}</span></h3>${list(L.feeds, x=>`<tr><td>${esc(x.type)}</td><td>${esc(x.title||'')} ${link(x.href)}</td></tr>`)}
+      <h3 style="font-size:11px;margin-top:14px">misc</h3>${kv([['manifest', link(L.manifest)],['amphtml', link(L.amp)],['prev / next', L.prevNext.length ? L.prevNext.map(x=>`${esc(x.rel)}: ${link(x.href)}`).join('<br>') : nul(null)]])}
+    </div>
+    <div class="card"><h3>Resource hints <span class="n">${L.resourceHints.length}</span></h3>${list(L.resourceHints, x=>`<tr><td>${esc(x.rel)}${x.as?' <span class="muted">as='+esc(x.as)+'</span>':''}</td><td>${link(x.href)}${x.crossorigin!=null?' <span class="pill">crossorigin</span>':''}</td></tr>`)}</div>
+    <div class="card"><h3>Other head links <span class="n">${L.otherHeadLinks.length}</span></h3>${list(L.otherHeadLinks, x=>`<tr><td>${esc(x.rel)}</td><td>${link(x.href)}</td></tr>`)}</div>
+    <div class="card wide"><h3>Scripts <span class="n">${L.scripts.length} + ${L.inlineScripts} inline</span></h3>${list(L.scripts, x=>`<tr><td>${x.module?'<span class="pill">module</span>':''}${x.async?'<span class="pill">async</span>':''}${x.defer?'<span class="pill">defer</span>':''}${!x.module&&!x.async&&!x.defer?'<span class="pill warn">blocking</span>':''}</td><td>${link(x.src)}</td></tr>`)}</div>
+    <div class="card wide"><h3>Stylesheets <span class="n">${L.stylesheets.length} + ${L.inlineStyles} inline</span></h3>${list(L.stylesheets, x=>`<tr><td>${esc(x.media||'all')}</td><td>${link(x.href)}</td></tr>`)}</div>
+  </div>`;
+}
+
+function outline(d){
+  const o = d.outline;
+  return `<div class="grid">
+    <div class="card"><h3>Heading tree <span class="n">${o.headings.length}</span></h3>
+      ${o.headings.length ? `<div class="tree">${o.headings.map(h => `<div class="h${h.level}" style="padding-left:${(h.level-1)*18}px" title="${esc(h.text)}"><span class="tag">h${h.level}</span>${esc(h.text)||'<span class="null">(empty)</span>'}</div>`).join('')}</div>` : '<span class="null">no headings</span>'}
+    </div>
+    <div class="card"><h3>Landmarks & structure</h3>${kv([
+      ...Object.entries(o.landmarks).map(([k,v]) => [`<${k}>`, v ? v : '<span class="null">0</span>']),
+      ['forms', o.forms], ['iframes', o.iframes.length ? o.iframes.map(link).join('<br>') : 0],
+      ['word count', o.wordCount],
+    ])}
+    <h3 style="margin-top:16px">Images</h3>${kv([['total', o.images.total],['missing alt', o.images.missingAlt ? `<span class="pill warn">${o.images.missingAlt}</span>` : 0],['empty alt (decorative)', o.images.emptyAlt],['lazy-loaded', o.images.lazy],['no width/height (CLS risk)', o.images.missingDimensions]])}</div>
+    <div class="card wide"><h3>Image list <span class="n">${o.images.list.length}</span></h3>
+      ${o.images.list.length ? `<table class="kv">${o.images.list.map(i => `<tr><td style="width:60px"><img src="${img(i.src)}" style="width:48px;height:36px;object-fit:cover;border-radius:4px;background:var(--panel2)" onerror="this.style.opacity=.15"></td><td>${link(i.src)}<br><span class="muted">alt: </span>${i.alt==null?'<span class="pill warn">missing</span>':i.alt===''?'<span class="pill">empty</span>':esc(i.alt)}${i.width?` <span class="muted">${esc(i.width)}×${esc(i.height)}</span>`:''}${i.loading?` <span class="pill">${esc(i.loading)}</span>`:''}</td></tr>`).join('')}</table>` : '<span class="null">no images</span>'}
+    </div>
+  </div>`;
+}
+
+function http(d){
+  const h = d.http;
+  const stClass = (s) => s >= 400 ? 'bad' : s >= 300 ? 'rd' : 'ok';
+  return `<div class="grid">
+    <div class="card"><h3>Response</h3>${kv([['final URL', link(h.finalUrl)],['status', `<span class="st ${stClass(h.status)}" style="font-weight:700">${h.status}</span> ${esc(h.statusText)}`],['total time', h.totalMs + ' ms'],['content-type', nul(h.headers['content-type'])],['content-length', nul(h.headers['content-length'])],['server', nul(h.headers['server'])],['x-powered-by', nul(h.headers['x-powered-by'])],['cache-control', nul(h.headers['cache-control'])],['etag / last-modified', nul(h.headers['etag']||h.headers['last-modified'])],['x-robots-tag', nul(h.xRobotsTag)]])}
+      <h3 style="margin-top:16px">Redirect chain <span class="n">${h.redirectChain.length - 1} hops</span></h3>
+      <div class="chain">${h.redirectChain.map(c => `<div><span class="st ${stClass(c.status)}">${c.status}</span><span class="ms">${c.ms} ms</span><span class="trunc">${esc(c.url)}</span></div>`).join('')}</div>
+    </div>
+    <div class="card"><h3>Security headers</h3>${kv(h.securityHeaders.map(s => [s.header, s.present ? `<span class="pill ok">✓</span> <span class="trunc" style="max-width:220px" title="${esc(s.value)}">${esc(s.value)}</span>` : '<span class="pill">absent</span>']))}<div class="muted" style="font-size:11px;margin-top:10px">Usually absent on dev servers; matters once you deploy.</div></div>
+    <div class="card wide"><h3>All response headers <span class="n">${Object.keys(h.headers).length}</span></h3>${kv(Object.entries(h.headers).sort().map(([k,v]) => [k, esc(v)]))}</div>
+  </div>`;
+}
+
+let filesLoaded = false;
+function files(d){
+  filesLoaded = false;
+  return `<div class="grid" id="filesgrid"><div class="card wide muted">Loading robots.txt, sitemap.xml, manifest, humans.txt, security.txt…</div></div>`;
+}
+async function loadFiles(){
+  const base = new URL(data.http.finalUrl).origin;
+  const targets = [['robots.txt', base + '/robots.txt'], ['sitemap.xml', base + '/sitemap.xml'], ['manifest', data.links.manifest], ['humans.txt', base + '/humans.txt'], ['security.txt', base + '/.well-known/security.txt'], ['ads.txt', base + '/ads.txt']].filter(t => t[1]);
+  const results = await Promise.all(targets.map(async ([name, u]) => { try { const r = await fetch('/api/text?url=' + encodeURIComponent(u)); return [name, u, await r.json()]; } catch (e) { return [name, u, { error: e.message }]; } }));
+  filesLoaded = true;
+  const g = $('#filesgrid'); if (!g) return;
+  g.innerHTML = results.map(([name, u, r]) => `<div class="card ${name==='sitemap.xml'||name==='manifest'?'wide':''}"><h3>${esc(name)} ${r.error ? '<span class="pill err">unreachable</span>' : r.status === 200 ? '<span class="pill ok">200</span>' : `<span class="pill warn">${r.status}</span>`}</h3><div class="muted" style="font-size:11px;margin-bottom:8px">${link(u)}</div>${r.error ? `<span class="muted">${esc(r.error)}</span>` : r.status === 200 ? `<pre>${/json/.test(r.contentType||'') || name==='manifest' ? (()=>{try{return hl(JSON.parse(r.text))}catch{return esc(r.text)}})() : esc(r.text.slice(0, 8000))}</pre>` : `<span class="null">not found (${r.status})</span>`}</div>`).join('');
+}
+
+function raw(d){
+  return `<div class="grid"><div class="card wide"><h3>&lt;head&gt; source <span class="n">${(d.headRaw||'').length} chars</span></h3><pre style="max-height:none">${esc(d.headRaw||'')}</pre></div>
+  <div class="card wide"><h3>Full JSON <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="navigator.clipboard.writeText(JSON.stringify(data,null,2));this.textContent='copied'">copy</button></h3><details><summary>expand</summary><pre style="max-height:none">${hl(d)}</pre></details></div></div>`;
+}
+
+if (urlIn.value) inspect();
+</script>
+</body>
+</html>

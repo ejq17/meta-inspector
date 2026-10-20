@@ -1,0 +1,12 @@
+{
+  "name": "meta-inspector",
+  "version": "2.0.0",
+  "description": "Local metadata, SEO, social-preview, structured-data and AI-readiness inspector for websites you're building",
+  "author": "EJ",
+  "license": "MIT",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "keywords": ["seo", "metadata", "open-graph", "json-ld", "llms.txt", "geo", "dev-tool", "localhost"],
+  "dependencies": { "cheerio": "^1.0.0", "express": "^4.19.2" }
+}
